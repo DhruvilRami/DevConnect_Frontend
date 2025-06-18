@@ -1,24 +1,14 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
-
-interface User {
-  id: string;
-  username: string;
-  email: string;
-  fullName: string;
-  avatar?: string;
-  bio?: string;
-  skills: string[];
-  githubUrl?: string;
-  linkedinUrl?: string;
-  portfolioUrl?: string;
-}
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { apiService, User } from '../services/api';
 
 interface AuthContextType {
   user: User | null;
   login: (email: string, password: string) => Promise<void>;
   register: (userData: any) => Promise<void>;
   logout: () => void;
+  updateUser: (userData: Partial<User>) => Promise<void>;
   isAuthenticated: boolean;
+  loading: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -33,35 +23,61 @@ export const useAuth = () => {
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  // Check if user is logged in on app start
+  useEffect(() => {
+    const checkAuth = async () => {
+      const token = localStorage.getItem('authToken');
+      if (token) {
+        try {
+          const response = await apiService.getCurrentUser();
+          setUser(response.user);
+        } catch (error) {
+          console.error('Auth check failed:', error);
+          localStorage.removeItem('authToken');
+        }
+      }
+      setLoading(false);
+    };
+
+    checkAuth();
+  }, []);
 
   const login = async (email: string, password: string) => {
-    // Mock login for now - will be replaced with real API call
-    const mockUser: User = {
-      id: '1',
-      username: 'johndoe',
-      email: email,
-      fullName: 'John Doe',
-      avatar: 'https://images.pexels.com/photos/220453/pexels-photo-220453.jpeg?auto=compress&cs=tinysrgb&w=400',
-      bio: 'Full-stack developer passionate about building innovative solutions',
-      skills: ['React', 'Node.js', 'Python', 'MongoDB', 'TypeScript'],
-      githubUrl: 'https://github.com/johndoe',
-      linkedinUrl: 'https://linkedin.com/in/johndoe',
-      portfolioUrl: 'https://johndoe.dev'
-    };
-    setUser(mockUser);
+    try {
+      const response = await apiService.login(email, password);
+      setUser(response.user);
+    } catch (error) {
+      console.error('Login failed:', error);
+      throw error;
+    }
   };
 
   const register = async (userData: any) => {
-    // Mock register for now - will be replaced with real API call
-    const newUser: User = {
-      id: Date.now().toString(),
-      ...userData,
-      skills: userData.skills || []
-    };
-    setUser(newUser);
+    try {
+      const response = await apiService.register(userData);
+      setUser(response.user);
+    } catch (error) {
+      console.error('Registration failed:', error);
+      throw error;
+    }
+  };
+
+  const updateUser = async (userData: Partial<User>) => {
+    if (!user) return;
+    
+    try {
+      const response = await apiService.updateUser(user._id, userData);
+      setUser(response.user);
+    } catch (error) {
+      console.error('Update user failed:', error);
+      throw error;
+    }
   };
 
   const logout = () => {
+    apiService.logout();
     setUser(null);
   };
 
@@ -70,7 +86,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     login,
     register,
     logout,
-    isAuthenticated: !!user
+    updateUser,
+    isAuthenticated: !!user,
+    loading
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
